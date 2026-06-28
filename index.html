@@ -411,6 +411,19 @@
       </div>
     </div>
 
+    <div class="group">
+      <p class="section-label">email</p>
+      <div class="socials-list">
+        <div class="social-wrap">
+          <div class="social-item" onclick="navigator.clipboard.writeText('your-email@domain.com').then(()=>{const n=this.querySelector('.social-name'); const prev=n.textContent; n.textContent='copied!'; setTimeout(()=>n.textContent=prev,1500)})">
+            <span class="social-name">skolus@proton.me (click to copy)</span>
+          </div>
+          <div class="social-tip">Copy email address</div>
+          <span class="social-arrow" style="margin-left: 0.4em;">🗍</span>
+        </div>
+      </div>
+    </div>
+
     <footer>
       &copy; 2026 skolus &nbsp;·&nbsp; <span id="j-hint">psst.. press J</span>
     </footer>
