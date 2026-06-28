@@ -19,6 +19,7 @@
       --muted: #5a6070;
       --accent: #b39ddb;       /* light purple matching index */
       --accent-dim: rgba(179,157,219,0.15);
+      --rain-color: rgba(160,180,220,0.18);
     }
 
     html, body {
@@ -30,6 +31,17 @@
       font-weight: 300;
       line-height: 1.7;
       overflow-x: hidden;
+    }
+
+    /* ── Rain canvas ── */
+    #rain {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
     }
 
     /* ── Layout ── */
@@ -46,7 +58,17 @@
     .card {
       width: 100%;
       max-width: 480px;
-      transform: translateY(-15px);
+      /* Start hidden and shifted up matching index layout behavior */
+      opacity: 0;
+      transform: translateY(-40px);
+      transition: opacity 1.2s cubic-bezier(0.215, 0.61, 0.355, 1), 
+                  transform 1.2s cubic-bezier(0.215, 0.61, 0.355, 1);
+    }
+
+    /* Target state when the overlay is dismissed */
+    .card.visible {
+      opacity: 1;
+      transform: translateY(-15px); /* Matches socials high-centered card design */
     }
 
     /* ── Heading ── */
@@ -70,7 +92,7 @@
       letter-spacing: 0.01em;
     }
 
-    /* ── Status Row (Visual echo of clock row) ── */
+    /* ── Status Row ── */
     .status-row {
       display: flex;
       align-items: center;
@@ -112,7 +134,7 @@
       margin-top: 1.5rem;
     }
 
-    /* ── Social Items (Matching projects list structure) ── */
+    /* ── Social Items ── */
     .socials-list {
       display: flex;
       flex-direction: column;
@@ -134,6 +156,7 @@
       padding: 0.18rem 0;
       width: fit-content;
       cursor: pointer;
+      transition: none;
     }
 
     .social-name {
@@ -231,9 +254,113 @@
       font-size: 0.75rem;
       color: var(--muted);
     }
+
+    #j-hint {
+      opacity: 0.4;
+      font-style: italic;
+      transition: opacity 0.3s;
+    }
+    #j-hint:hover { opacity: 0.7; }
+
+    #mobile-hint {
+      display: none;
+      position: fixed;
+      bottom: 1.2rem;
+      right: 1.2rem;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      opacity: 0.35;
+      transition: opacity 0.2s;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #mobile-hint:hover, #mobile-hint:active { opacity: 0.75; }
+
+    @media (max-width: 600px) {
+      #j-hint { display: none; }
+      #mobile-hint { display: flex; }
+    }
+
+    /* ── Mute toggle ── */
+    #mute-btn {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 20;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      padding: 0.25em 0.7em;
+      cursor: pointer;
+      transition: border-color 0.18s, color 0.18s, background 0.18s;
+      font-family: inherit;
+      letter-spacing: 0.03em;
+    }
+    #mute-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* ── Splash canvas ── */
+    #splashes {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* ── Enter Overlay ── */
+    #enter-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .enter-text {
+      color: var(--muted);
+      font-size: 1.3rem;
+      letter-spacing: 0.08em;
+      transition: color 0.2s ease;
+    }
+
+    #enter-overlay:hover .enter-text {
+      color: var(--accent);
+    }
+
+    #enter-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
   </style>
 </head>
 <body>
+
+<div id="enter-overlay">
+  <div class="enter-text">click to enter</div>
+</div>
+
+<canvas id="rain"></canvas>
 
 <main>
   <div class="card">
@@ -279,16 +406,264 @@
             <span class="social-name">skolus (click to copy)</span>
           </div>
           <div class="social-tip">@skolus</div>
-          <span class="social-arrow">🗍</span>
+          <span class="social-arrow" style="margin-left: 0.4em;">🗍</span>
         </div>
       </div>
     </div>
 
     <footer>
-      &copy; 2026 skolus
+      &copy; 2026 skolus &nbsp;·&nbsp; <span id="j-hint">psst.. press J</span>
     </footer>
   </div>
 </main>
+
+<button id="mobile-hint" aria-label="Randomise rain colour">?</button>
+
+<script>
+  // ── Scroll → Rain Speed ──
+  const BASE_SPEED_MIN = 10, BASE_SPEED_MAX = 17;
+  let scrollSpeedMult = 1;
+
+  window.addEventListener('wheel', (e) => {
+    scrollSpeedMult = Math.max(1, Math.min(6, scrollSpeedMult + (e.deltaY > 0 ? 0.4 : -0.4)));
+  }, { passive: true });
+
+  const canvas = document.getElementById('rain');
+  const ctx = canvas.getContext('2d');
+  let drops = [];
+  let animId;
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    initDrops();
+  }
+
+  function initDrops() {
+    drops = [];
+    const count = Math.floor((canvas.width * canvas.height) / 6000);
+    for (let i = 0; i < count; i++) {
+      drops.push(newDrop(true));
+    }
+  }
+
+  function newDrop(randomY) {
+    return {
+      x:       Math.random() * canvas.width,
+      y:       randomY ? Math.random() * canvas.height : -20,
+      len:     Math.random() * 18 + 10,
+      speed:   Math.random() * 7 + 10,
+      opacity: Math.random() * 0.4 + 0.15,
+      width:   Math.random() * 0.8 + 0.4,
+      vx:      0,
+    };
+  }
+
+  // ── Rain colour ──
+  let rainColor = null;
+
+  const hint = document.getElementById('j-hint');
+  const mobileBtn = document.getElementById('mobile-hint');
+
+  function randomiseRain() {
+    const r = Math.floor(Math.random() * 256);
+    const g = Math.floor(Math.random() * 256);
+    const b = Math.floor(Math.random() * 256);
+    rainColor = `${r},${g},${b}`;
+    hint.textContent = 'press K to reset';
+    mobileBtn.textContent = '↺';
+  }
+
+  function resetRain() {
+    rainColor = null;
+    hint.textContent = 'psst.. press J';
+    mobileBtn.textContent = '?';
+  }
+
+  mobileBtn.addEventListener('click', () => {
+    rainColor ? resetRain() : randomiseRain();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'j' || e.key === 'J') randomiseRain();
+    else if (e.key === 'k' || e.key === 'K') resetRain();
+  });
+
+  let mouse = { x: -9999, y: -9999 };
+  window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
+
+  const MOUSE_RADIUS = 110;
+  const PUSH_STRENGTH = 6;
+  const RETURN_EASE = 0.08;
+
+  function drawRain() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < drops.length; i++) {
+      const d = drops[i];
+
+      const dx = d.x - mouse.x;
+      const dy = d.y - mouse.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < MOUSE_RADIUS && dist > 0) {
+        const influence = (1 - dist / MOUSE_RADIUS);
+        d.vx += (dx / dist) * influence * PUSH_STRENGTH;
+      }
+
+      d.vx = Math.max(-18, Math.min(18, d.vx));
+      d.vx *= (1 - RETURN_EASE);
+
+      const spd = d.speed * scrollSpeedMult;
+      d.x += spd * 0.18 + d.vx;
+      d.y += spd;
+
+      const tiltX = d.len * 0.18 + d.vx * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x + tiltX, d.y + d.len);
+      ctx.strokeStyle = `rgba(${rainColor ?? '160,185,230'},${rainColor ? Math.min(1, d.opacity * 2.2) : d.opacity})`;
+      ctx.lineWidth   = rainColor ? d.width * 2.5 : d.width;
+      ctx.stroke();
+
+      if (d.y > canvas.height + d.len || d.x > canvas.width + d.len) {
+        drops[i] = newDrop(false);
+        drops[i].x = Math.random() * canvas.width;
+      }
+    }
+    animId = requestAnimationFrame(drawRain);
+  }
+
+  resize();
+  drawRain();
+
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(animId);
+    resize();
+    drawRain();
+  });
+</script>
+
+<audio id="purr-sfx" src="assets/purr.mp3" preload="auto"></audio>
+<img
+  id="site-cat"
+  src="assets/cat.webp"
+  alt="cat"
+  title="click me :3"
+  onclick="const a=document.getElementById('purr-sfx');a.currentTime=0;a.play();"
+  style="
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+    cursor: pointer;
+    z-index: 10;
+    image-rendering: pixelated;
+    transition: transform 0.12s ease;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+  "
+  onmousedown="this.style.transform='scale(0.88)'"
+  onmouseup="this.style.transform='scale(1)'"
+  onmouseleave="this.style.transform='scale(1)'"
+/>
+
+<audio id="rain-sfx" src="assets/rain.mp3" loop preload="auto"></audio>
+
+<canvas id="splashes"></canvas>
+
+<button id="mute-btn" aria-label="Toggle rain sound">♪ rain</button>
+
+<script>
+  // ── Rain audio ──
+  const rainAudio = document.getElementById('rain-sfx');
+  rainAudio.volume = 0.06;
+  let rainMuted = false;
+  let rainStarted = false;
+
+  const enterOverlay = document.getElementById('enter-overlay');
+
+  enterOverlay.addEventListener('click', () => {
+    enterOverlay.classList.add('hidden');
+    document.querySelector('.card').classList.add('visible');
+    if (!rainStarted && !rainMuted) {
+      rainStarted = true;
+      rainAudio.play().catch((err) => console.log("Audio play blocked:", err));
+    }
+  });
+
+  function tryStartRain() {
+    if (rainStarted || rainMuted) return;
+    rainStarted = true;
+    rainAudio.play().catch(() => {});
+  }
+  window.addEventListener('click', tryStartRain, { once: false });
+  window.addEventListener('keydown', tryStartRain, { once: false });
+
+  const muteBtn = document.getElementById('mute-btn');
+  muteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    rainMuted = !rainMuted;
+    rainAudio.muted = rainMuted;
+    muteBtn.textContent = rainMuted ? '♪ muted' : '♪ rain';
+    if (rainMuted) {
+      rainAudio.pause();
+    } else {
+      rainAudio.play().catch(() => {});
+    }
+  });
+
+  // ── Splash effect ──
+  const splashCanvas = document.getElementById('splashes');
+  const sCtx = splashCanvas.getContext('2d');
+  let splashParticles = [];
+
+  function resizeSplash() {
+    splashCanvas.width = window.innerWidth;
+    splashCanvas.height = window.innerHeight;
+  }
+  resizeSplash();
+  window.addEventListener('resize', resizeSplash);
+
+  function spawnSplash(x, y) {
+    const count = 10 + Math.floor(Math.random() * 8);
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 3.5 + 1;
+      splashParticles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2.5,
+        life: 1,
+        size: Math.random() * 2.5 + 0.8,
+      });
+    }
+  }
+
+  window.addEventListener('click', (e) => {
+    if (e.target.id === 'mute-btn' || e.target.id === 'site-cat') return;
+    spawnSplash(e.clientX, e.clientY);
+    tryStartRain();
+  });
+
+  function animateSplash() {
+    sCtx.clearRect(0, 0, splashCanvas.width, splashCanvas.height);
+    for (let i = splashParticles.length - 1; i >= 0; i--) {
+      const p = splashParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.18; // gravity
+      p.life -= 0.045;
+      if (p.life <= 0) { splashParticles.splice(i, 1); continue; }
+      sCtx.beginPath();
+      sCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      sCtx.fillStyle = `rgba(160,185,230,${p.life * 0.7})`;
+      sCtx.fill();
+    }
+    requestAnimationFrame(animateSplash);
+  }
+  animateSplash();
+</script>
 
 </body>
 </html>
